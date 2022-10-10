@@ -2,3 +2,4 @@
 volumes
 scripts
 scripts/.ipynb_checkpoints/*
+data
