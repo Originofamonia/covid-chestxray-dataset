@@ -1,8 +1,19 @@
 from codecs import ignore_errors
+from operator import ne
 import pandas as pd
 import json
 import os
+import re
 import numpy as np
+from docx import Document
+from docx.shared import Inches
+from docx.enum.text import WD_COLOR_INDEX
+
+from pylatex import Document, Section, Subsection, Tabular, TextColor, Package, NoEscape
+from pylatex import Math, TikZ, Axis, Plot, Figure, Matrix, Alignat
+from pylatex.utils import italic
+from pylatexenc import latexencode
+import os
 
 
 def main():
@@ -74,6 +85,10 @@ def filter_openi():
     openi = f'data/indiana_reports.csv'
     df = pd.read_csv(openi)
     findings = df['Problems']
+    unique_findings = []
+    haha = [unique_findings.extend(item.split(';')) for item in findings]
+    unique_findings = list(set(unique_findings))
+    print(unique_findings)
     reports = df['findings']
     df['report'] = (df['findings'] + df['impression']).astype(str)
     columns=['tuberculosis', 'pneumonia', 'normal', 'report']
@@ -94,13 +109,166 @@ def filter_openi():
 
 
 def read_json():
-    file = f'06102020.litcovid.released.image.json'
+    """
+    failed to add paragraph into row_cell, don't use
+    """
+    # read from findings.txt
+    with open(f'data/findings.txt', 'r') as f1:
+        findings_list = f1.read().split('\n')
+        # print(findings_list)  # correct
+
+    file = f'data/06102020.litcovid.released.text.json'
     with open(file) as f:
         data = json.load(f)
-        print(data)
+        reports = []
+        docu = Document()
+        docu.add_heading('COVID CXR CT reports', 0)
+        table = docu.add_table(rows=1, cols=3, style='TableGrid')
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = 'Id'
+        hdr_cells[1].text = 'Report'
+        hdr_cells[2].text = 'Label'
+        for i, item in enumerate(data):
+            if 'text' in item:
+                report = ""
+                for infons in item['text']:
+                    report += infons['text']
+                reports.append(report)
+
+        reports = set(reports)
+        for i, rep in enumerate(reports):
+            z1 = re.findall(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+            result = re.finditer(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+            
+            if len(z1) > 1:
+                indices = []
+                for match in result:
+                    indices.append(match.span(1))  # span(1): (1965, 1974)
+                    # print(rep[match.span(1)[0]:match.span(1)[1]])
+                para = docu.add_paragraph(rep[:indices[0][0]])
+                for j, (idx1, idx2) in enumerate(indices):
+                    para.add_run(rep[idx1:idx2]).font.highlight_color = WD_COLOR_INDEX.YELLOW
+                    if j+1 < len(indices):
+                        para.add_run(rep[idx2:indices[j+1][0]])
+                row_cells = table.add_row().cells
+                row_cells[0].text = str(i)
+                row_cells[1].add_paragraph(style=None)
+                row_cells[1].paragraphs[0] = para
+                row_cells[2].text = str({word:1 for word in z1})
+
+        docu.save('data/COVID_CXR_CT.docx')
+
+
+def latex_example():
+    """
+    TODO: convert above function to generate latex
+    """
+    # image_filename = os.path.join(os.path.dirname(__file__), 'kitten.jpg')
+  
+    geometry_options = {"tmargin": "1cm", "lmargin": "1cm"}
+    doc = Document(geometry_options=geometry_options)
+  
+    # creating a pdf with title "the simple stuff"
+    # with doc.create(Section('The simple stuff')):
+    #     doc.append('Some regular text and some')
+    #     doc.append(italic('italic text. '))
+    #     doc.append('\nAlso some crazy characters: $&#{}')
+    #     with doc.create(Subsection('Math that is incorrect')):
+    #         doc.append(Math(data=['2*3', '=', 9]))
+  
+    #     # creating subsection of a pdf
+    #     with doc.create(Subsection('Table of something')):
+    #         with doc.create(Tabular('rc|cl')) as table:
+    #             table.add_hline()
+    #             table.add_row((1, 2, 3, 4))
+    #             table.add_hline(1, 2)
+    #             table.add_empty_row()
+    #             table.add_row((4, 5, 6, 7))
+  
+    #  # making a pdf using .generate_pdf
+    # doc.generate_pdf(f'data/full', clean_tex=False)
+    # tex = doc.dumps()  # The document as string in LaTeX syntax
+    # doc = Document()
+    doc.packages.append(Package('color'))
+    # doc.preamble.append(NoEscape(r'\newcommand{\exampleCommand}[3]{\color{#1} #2 #3 \color{black}}'))
+    with doc.create(Tabular('c|c|c')) as table:
+        table.add_hline()
+        hl_report = NoEscape(r'haha \textcolor{red}{Hello World!}  xixi ')
+        hl_report += NoEscape(r'xiha')
+        table.add_row((4, hl_report, 6))
+        table.add_hline()
+
+    # doc.preamble.append(NoEscape(r'\newcommand*\Entry[2]{\sffamily#1 & #2}'))
+    # doc.append(NoEscape(r'\begin{tabular}{ll}'))
+    # doc.append(NoEscape(r'\Entry{abc}{123}\\'))
+    # doc.append(NoEscape(r'\end{tabular}'))
+
+    doc.generate_pdf(f'data/pycommands', clean_tex=False)
+
+
+def json_latex():
+    """
+    TODO: convert above function to generate latex
+    """
+    geometry_options = {"tmargin": "1cm", "lmargin": "1cm"}
+    doc = Document(geometry_options=geometry_options)
+    with open(f'data/findings.txt', 'r') as f1:
+        findings_list = f1.read().split('\n')
+        # print(findings_list)  # correct
+
+    file = f'data/06102020.litcovid.released.text.json'
+    with open(file) as f:
+        data = json.load(f)
+        reports = []
+        for i, item in enumerate(data):
+            if 'text' in item:
+                report = ""
+                for infons in item['text']:
+                    report += infons['text']
+                reports.append(report)
+
+        reports = sorted(list(set(reports)))
+        doc.packages.append(Package('color'))
+        
+        for i, rep in enumerate(reports):
+            with doc.create(Section(f'{i}')):
+                z1 = re.findall(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+                result = re.finditer(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+                new_report = ""
+                if len(z1) > 1:
+                    indices = []  # keywords indices
+                    for match in result:
+                        indices.append(match.span(1))  # span(1): (1965, 1974)
+
+                    new_report += rep[:indices[0][0]]
+                    for j, (idx1, idx2) in enumerate(indices):
+                        new_report += '\\textcolor{red}{' + rep[idx1:idx2] + '}'
+                        if j+1 < len(indices):
+                            new_report += rep[idx2:indices[j+1][0]]
+                    new_report += rep[idx2:]
+                # build highlighed report in hl_report
+                new_report = new_report.encode('utf-8','ignore').decode("utf-8")
+                doc.append(NoEscape(new_report))
+
+                with doc.create(Subsection('Labels')):
+                    doc.append(NoEscape(str({word:1 for word in z1})))
+
+    # doc.generate_pdf(f'data/COVID_CXR_CT', clean_tex=False)
+    doc.generate_tex(f'data/COVID_CXR_CT')
+    tex = doc.dumps()
+
+
+def read_xinyue_label():
+    """
+    1. use labels from xinyue's result, 
+    2. randomly sample 100, make tex that highlight keywords in the report
+    """
 
 
 if __name__ == '__main__':
     # main()
     # filter_covid()
-    filter_openi()
+    # filter_openi()
+    # read_json()
+    # latex_example()
+    json_latex()
