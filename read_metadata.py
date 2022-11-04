@@ -247,7 +247,7 @@ def json_latex():
                             new_report += rep[idx2:indices[j+1][0]]
                     new_report += rep[idx2:]
                 # build highlighed report in hl_report
-                new_report = new_report.encode('utf-8','ignore').decode("utf-8")
+                # new_report = new_report.encode('utf-8','ignore').decode("utf-8")
                 doc.append(NoEscape(new_report))
 
                 with doc.create(Subsection('Labels')):
@@ -263,6 +263,106 @@ def read_xinyue_label():
     1. use labels from xinyue's result, 
     2. randomly sample 100, make tex that highlight keywords in the report
     """
+    label_file = f'data/covid_labels.json'
+    with open(label_file) as f2:
+        labels = json.load(f2)
+        # print(labels)
+
+    file = f'data/06102020.litcovid.released.text.json'
+    with open(file) as f1:
+        data = json.load(f1)
+        reports = []
+        for i, item in enumerate(data):
+            if 'text' in item:
+                report = ""
+                for infons in item['text']:
+                    report += infons['text']
+                reports.append(report)
+
+        reports = sorted(list(set(reports)))
+        geometry_options = {"tmargin": "1cm", "lmargin": "1cm"}
+        doc = Document(geometry_options=geometry_options)
+        doc.packages.append(Package('color'))
+        intersected_findings = []
+        class_counter = {}
+        for i, (rep, label) in enumerate(zip(reports, labels)):
+            findings_list = list(label['entity'].keys())
+            with doc.create(Section(f'{i+1}')):
+                if len(findings_list) > 0:
+                    for fi in findings_list:
+                        if fi in class_counter:
+                            class_counter[fi] += 1
+                        else:
+                            class_counter[fi] = 1
+                    intersected_findings.extend(findings_list)
+                    z1 = re.findall(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+                    result = re.finditer(r"(?=("+'|'.join(findings_list)+r"))", rep, flags=re.I)
+                    new_report = ""
+                    if len(z1) > 1:
+                        indices = []  # keywords indices
+                        for match in result:
+                            indices.append(match.span(1))  # span(1): (1965, 1974)
+
+                        new_report += rep[:indices[0][0]]
+                        for j, (idx1, idx2) in enumerate(indices):
+                            new_report += '\\textcolor{red}{' + rep[idx1:idx2] + '}'
+                            if j+1 < len(indices):
+                                new_report += rep[idx2:indices[j+1][0]]
+                        new_report += rep[idx2:]
+
+                        doc.append(NoEscape(new_report))
+
+                        with doc.create(Subsection('Labels')):
+                            doc.append(NoEscape(str({word:1 for word in findings_list})))
+                else:
+                    # no finding
+                    doc.append(NoEscape(rep))
+                    doc.create(Subsection('Labels'))
+
+        print(set(intersected_findings))
+        print(class_counter)
+        doc.generate_tex(f'data/COVID_CXR_CT')
+        tex = doc.dumps()
+
+
+def build_train_all_csv():
+    """
+    from report and label build df with report + multi-hot label
+    """
+    unique_labels = ['consolidation', 'edema', 'cardiomegaly', 'pleural effusion', 
+    'Lung Lesion', 'fracture', 'pneumothorax', 'pneumonia', 'medical device', 
+    'lung opacity', 'atelectasis']
+    label_file = f'data/covid_labels.json'
+    with open(label_file) as f2:
+        labels = json.load(f2)
+
+
+    file = f'data/06102020.litcovid.released.text.json'
+    with open(file) as f1:
+        data = json.load(f1)
+        reports = []
+        for i, item in enumerate(data):
+            if 'text' in item:
+                report = ""
+                for infons in item['text']:
+                    report += infons['text']
+                reports.append(report)
+        df_cols = unique_labels + ['report']
+        df = pd.DataFrame(columns=df_cols)
+        reports = sorted(list(set(reports)))
+        for i, (rep, label) in enumerate(zip(reports, labels)):            
+            empty_labels = np.zeros(len(unique_labels))
+            findings_list = list(label['entity'].keys())
+            for fi in findings_list:
+                idx = unique_labels.index(fi)
+                empty_labels[idx] = 1
+
+            row = empty_labels.tolist() + [rep]
+            row = pd.Series(row, index=df.columns)
+            df = df.append(row, ignore_index=True)
+    train_df = df.sample(frac=0.8, replace=False)
+    train_df.to_csv(f'output/ctcxr_train.csv')
+    df.to_csv(f'output/ctcxr_all.csv')
 
 
 if __name__ == '__main__':
@@ -271,4 +371,6 @@ if __name__ == '__main__':
     # filter_openi()
     # read_json()
     # latex_example()
-    json_latex()
+    # json_latex()
+    # read_xinyue_label()
+    build_train_all_csv()

@@ -471,7 +471,7 @@ def gen_disease_json(print_test = False, stop=False, save=True, uniform_name=Tru
     file = f'data/06102020.litcovid.released.text.json'
     
     final_diseases = []  # final output
-    
+
     with open(file) as f:
         data = json.load(f)
         reports = []
